@@ -136,6 +136,11 @@ ngx_http_auth_digest_handler(ngx_http_request_t *r)
     u_char                           line[NGX_HTTP_AUTH_DIGEST_BUF_SIZE];
     u_char                          *p;
 
+#ifdef DIGEST_AUTHORIZED_FIELD
+    if (r->digest_authorized) {
+      return NGX_OK;
+    }
+#endif
 
     // if digest auth is disabled for this location, bail out immediately
     alcf = ngx_http_get_module_loc_conf(r, ngx_http_auth_digest_module);
@@ -218,6 +223,11 @@ ngx_http_auth_digest_handler(ngx_http_request_t *r)
             rc = ngx_http_auth_digest_verify_user(r, auth_fields, &passwd_line);
             if (rc != NGX_DECLINED){
               ngx_http_auth_digest_close(&file);
+#ifdef DIGEST_AUTHORIZED_FIELD
+              if(rc == NGX_OK) {
+                r->digest_authorized = 1;
+              }
+#endif
               return rc;
             }
           }
@@ -238,6 +248,11 @@ ngx_http_auth_digest_handler(ngx_http_request_t *r)
           rc = ngx_http_auth_digest_verify_user(r, auth_fields, &passwd_line);
           if (rc != NGX_DECLINED){
             ngx_http_auth_digest_close(&file);
+#ifdef DIGEST_AUTHORIZED_FIELD
+            if(rc == NGX_OK) {
+              r->digest_authorized = 1;
+            }
+#endif
             return rc;
           }                        
         }else{

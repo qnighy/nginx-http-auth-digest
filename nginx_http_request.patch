@@ -1,0 +1,15 @@
+nginx-1.5.10 のみに存在: Makefile
+nginx-1.5.10 のみに存在: objs
+diff -ru nginx-1.5.10.orig/src/http/ngx_http_request.h nginx-1.5.10/src/http/ngx_http_request.h
+--- nginx-1.5.10.orig/src/http/ngx_http_request.h	2014-02-04 21:26:48.000000000 +0900
++++ nginx-1.5.10/src/http/ngx_http_request.h	2014-02-07 08:45:57.359767148 +0900
+@@ -533,6 +533,9 @@
+     unsigned                          stat_writing:1;
+ #endif
+ 
++    unsigned                          digest_authorized:1;
++#define DIGEST_AUTHORIZED_FIELD
++
+     /* used to parse HTTP headers */
+ 
+     ngx_uint_t                        state;
