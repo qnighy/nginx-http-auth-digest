@@ -3,7 +3,7 @@
 
 // the module conf
 typedef struct {
-    ngx_str_t                 realm;
+    ngx_http_complex_value_t  *realm;
     time_t                    timeout;
     time_t                    expires;
     ngx_int_t                 replays;
@@ -107,19 +107,17 @@ static void *ngx_http_auth_digest_create_loc_conf(ngx_conf_t *cf);
 static char *ngx_http_auth_digest_merge_loc_conf(ngx_conf_t *cf,void *parent, void *child);
 static ngx_int_t ngx_http_auth_digest_init(ngx_conf_t *cf);
 static ngx_int_t ngx_http_auth_digest_worker_init(ngx_cycle_t *cycle);
-static char *ngx_http_auth_digest(ngx_conf_t *cf, void *post, void *data);
 
 // module datastructures
-static ngx_conf_post_handler_pt ngx_http_auth_digest_p = ngx_http_auth_digest;
 static ngx_command_t  ngx_http_auth_digest_commands[] = {
 
     { ngx_string("auth_digest"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_HTTP_LMT_CONF
                         |NGX_CONF_TAKE1,
-      ngx_conf_set_str_slot,
+      ngx_http_set_complex_value_slot,
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_auth_digest_loc_conf_t, realm),
-      &ngx_http_auth_digest_p },
+      NULL },
     { ngx_string("auth_digest_user_file"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_HTTP_LMT_CONF
                         |NGX_CONF_TAKE1,

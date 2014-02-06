@@ -37,12 +37,12 @@ ngx_http_auth_digest_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_conf_merge_sec_value(conf->timeout, prev->timeout, 60);
     ngx_conf_merge_sec_value(conf->expires, prev->expires, 10);
     ngx_conf_merge_value(conf->replays, prev->replays, 20);
-    ngx_conf_merge_str_value(conf->realm, prev->realm, "")
+    ngx_conf_merge_ptr_value(conf->realm, prev->realm, NULL)
     if (conf->user_file.value.len == 0) {
       conf->user_file = prev->user_file;
     }
   
-    if (conf->realm.len>0 && conf->user_file.value.len == 0){
+    if (conf->realm != NULL && conf->user_file.value.data == NULL){
       ngx_log_error(NGX_LOG_ERR, cf->log, 0,"auth_digest enabled but auth_digest_user_file not specified");
       return NGX_CONF_ERROR;
     }
@@ -118,18 +118,6 @@ ngx_http_auth_digest_worker_init(ngx_cycle_t *cycle){
   return NGX_OK;
 }
 
-static char *
-ngx_http_auth_digest(ngx_conf_t *cf, void *post, void *data)
-{
-    ngx_str_t  *realm = data; // i.e., first field of ngx_http_auth_digest_loc_conf_t
-    if (ngx_strcmp(realm->data, "off") == 0) {
-        ngx_str_set(realm, "");
-        return NGX_CONF_OK;
-    }
-
-    return NGX_CONF_OK;
-}
-
 
 static ngx_int_t
 ngx_http_auth_digest_handler(ngx_http_request_t *r)
@@ -139,7 +127,7 @@ ngx_http_auth_digest_handler(ngx_http_request_t *r)
     ngx_fd_t                         fd;
     ngx_int_t                        rc;
     ngx_err_t                        err;
-    ngx_str_t                        user_file, passwd_line;
+    ngx_str_t                        user_file, realm, passwd_line;
     ngx_file_t                       file;
     ngx_uint_t                       i, begin, tail, idle;
     ngx_http_auth_digest_loc_conf_t *alcf;
@@ -151,7 +139,7 @@ ngx_http_auth_digest_handler(ngx_http_request_t *r)
 
     // if digest auth is disabled for this location, bail out immediately
     alcf = ngx_http_get_module_loc_conf(r, ngx_http_auth_digest_module);
-    if (alcf->realm.len == 0 || alcf->user_file.value.len == 0) {
+    if (alcf->realm == NULL || alcf->user_file.value.data == NULL) {
         return NGX_DECLINED;
         
         //
@@ -161,12 +149,20 @@ ngx_http_auth_digest_handler(ngx_http_request_t *r)
         
     }
 
+    if (ngx_http_complex_value(r, alcf->realm, &realm) != NGX_OK) {
+        return NGX_ERROR;
+    }
+
+    if (realm.len == 3 && ngx_strncmp(realm.data, "off", 3) == 0) {
+        return NGX_DECLINED;
+    }
+
     // unpack the Authorization header (if any) and verify that it contains all
     // required fields. otherwise send a challenge
     auth_fields = ngx_pcalloc(r->pool, sizeof(ngx_http_auth_digest_cred_t));
     rc = ngx_http_auth_digest_check_credentials(r, auth_fields);
     if (rc==NGX_DECLINED) {
-      return ngx_http_auth_digest_send_challenge(r, &alcf->realm, 0);
+      return ngx_http_auth_digest_send_challenge(r, &realm, 0);
     }else if (rc == NGX_ERROR) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
@@ -260,7 +256,7 @@ ngx_http_auth_digest_handler(ngx_http_request_t *r)
     
     // since no match was found based on the fields in the authorization header,
     // send a new challenge and let the client retry
-    return ngx_http_auth_digest_send_challenge(r, &alcf->realm, auth_fields->stale);
+    return ngx_http_auth_digest_send_challenge(r, &realm, auth_fields->stale);
 }
 
 
