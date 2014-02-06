@@ -379,11 +379,12 @@ static ngx_int_t
 ngx_http_auth_digest_verify_hash(ngx_http_request_t *r, ngx_http_auth_digest_cred_t *fields, u_char *hashed_pw)
 {
   u_char      *p;
-  ngx_str_t    http_method;
-  ngx_str_t    HA1, HA2, ha2_key;
-  ngx_str_t    digest, digest_key;
+  ngx_str_t    HA1, HA2;
+  ngx_str_t    digest;
   ngx_md5_t    md5;
   u_char       hash[16];
+
+  (void)p;
 
   //  the hashing scheme:
   //    digest: MD5(MD5(username:realm:password):nonce:nc:cnonce:qop:MD5(method:uri))
@@ -396,42 +397,32 @@ ngx_http_auth_digest_verify_hash(ngx_http_request_t *r, ngx_http_auth_digest_cre
   p = ngx_cpymem(HA1.data, hashed_pw, 32);
   
   // calculate ha2: md5(method:uri)
-  http_method.len = r->method_name.len+1;
-  http_method.data = ngx_pcalloc(r->pool, http_method.len);
-  if (http_method.data==NULL) return NGX_HTTP_INTERNAL_SERVER_ERROR;
-  p = ngx_cpymem(http_method.data, r->method_name.data, r->method_name.len);
-  
-  ha2_key.len = http_method.len + r->unparsed_uri.len + 1;
-  ha2_key.data = ngx_pcalloc(r->pool, ha2_key.len);
-  if (ha2_key.data==NULL) return NGX_HTTP_INTERNAL_SERVER_ERROR;
-  p = ngx_cpymem(ha2_key.data, http_method.data, http_method.len-1); *p++ = ':';
-  p = ngx_cpymem(p, r->unparsed_uri.data, r->unparsed_uri.len);
-
   HA2.len = 33;
   HA2.data = ngx_pcalloc(r->pool, HA2.len);
   ngx_md5_init(&md5);
-  ngx_md5_update(&md5, ha2_key.data, ha2_key.len-1);
-  ngx_md5_final(hash, &md5);  
+  ngx_md5_update(&md5, r->method_name.data, r->method_name.len);
+  ngx_md5_update(&md5, ":", 1);
+  ngx_md5_update(&md5, r->unparsed_uri.data, r->unparsed_uri.len);
+  ngx_md5_final(hash, &md5);
   ngx_hex_dump(HA2.data, hash, 16);
   
   // calculate digest: md5(ha1:nonce:nc:cnonce:qop:ha2)
-  digest_key.len = HA1.len + fields->nonce.len + fields->nc.len + fields->cnonce.len + fields->qop.len + HA2.len;
-  digest_key.data = ngx_pcalloc(r->pool, digest_key.len);
-  if (digest_key.data==NULL) return NGX_HTTP_INTERNAL_SERVER_ERROR;
-  
-  p = ngx_cpymem(digest_key.data, HA1.data, HA1.len-1); *p++ = ':';  
-  p = ngx_cpymem(p, fields->nonce.data, fields->nonce.len-1); *p++ = ':';
-  p = ngx_cpymem(p, fields->nc.data, fields->nc.len-1); *p++ = ':';
-  p = ngx_cpymem(p, fields->cnonce.data, fields->cnonce.len-1); *p++ = ':';
-  p = ngx_cpymem(p, fields->qop.data, fields->qop.len-1); *p++ = ':';
-  p = ngx_cpymem(p, HA2.data, HA2.len-1);  
-
   digest.len = 33;
   digest.data = ngx_pcalloc(r->pool, 33);
   if (digest.data==NULL) return NGX_HTTP_INTERNAL_SERVER_ERROR;
   ngx_md5_init(&md5);
-  ngx_md5_update(&md5, digest_key.data, digest_key.len-1);
-  ngx_md5_final(hash, &md5);  
+  ngx_md5_update(&md5, HA1.data, HA1.len-1);
+  ngx_md5_update(&md5, ":", 1);
+  ngx_md5_update(&md5, fields->nonce.data, fields->nonce.len-1);
+  ngx_md5_update(&md5, ":", 1);
+  ngx_md5_update(&md5, fields->nc.data, fields->nc.len-1);
+  ngx_md5_update(&md5, ":", 1);
+  ngx_md5_update(&md5, fields->cnonce.data, fields->cnonce.len-1);
+  ngx_md5_update(&md5, ":", 1);
+  ngx_md5_update(&md5, fields->qop.data, fields->qop.len-1);
+  ngx_md5_update(&md5, ":", 1);
+  ngx_md5_update(&md5, HA2.data, HA2.len-1);
+  ngx_md5_final(hash, &md5);
   ngx_hex_dump(digest.data, hash, 16);
 
   // compare the hash of the full digest string to the response field of the auth header
@@ -484,26 +475,26 @@ ngx_http_auth_digest_verify_hash(ngx_http_request_t *r, ngx_http_auth_digest_cre
     
     // recalculate the digest with a modified HA2 value (for rspauth) and emit the
     // Authentication-Info header    
-    ngx_memset(ha2_key.data, 0, ha2_key.len);
-    p = ngx_snprintf(ha2_key.data, 1 + r->unparsed_uri.len, ":%s", r->unparsed_uri.data);
-
     ngx_memset(HA2.data, 0, HA2.len);
     ngx_md5_init(&md5);
-    ngx_md5_update(&md5, ha2_key.data, 1 + r->unparsed_uri.len);
-    ngx_md5_final(hash, &md5);  
+    ngx_md5_update(&md5, ":", 1);
+    ngx_md5_update(&md5, r->unparsed_uri.data, r->unparsed_uri.len);
+    ngx_md5_final(hash, &md5);
     ngx_hex_dump(HA2.data, hash, 16);
 
-    ngx_memset(digest_key.data, 0, digest_key.len);
-    p = ngx_cpymem(digest_key.data, HA1.data, HA1.len-1); *p++ = ':';  
-    p = ngx_cpymem(p, fields->nonce.data, fields->nonce.len-1); *p++ = ':';
-    p = ngx_cpymem(p, fields->nc.data, fields->nc.len-1); *p++ = ':';
-    p = ngx_cpymem(p, fields->cnonce.data, fields->cnonce.len-1); *p++ = ':';
-    p = ngx_cpymem(p, fields->qop.data, fields->qop.len-1); *p++ = ':';
-    p = ngx_cpymem(p, HA2.data, HA2.len-1);  
-
     ngx_md5_init(&md5);
-    ngx_md5_update(&md5, digest_key.data, digest_key.len-1);
-    ngx_md5_final(hash, &md5);  
+    ngx_md5_update(&md5, HA1.data, HA1.len-1);
+    ngx_md5_update(&md5, ":", 1);
+    ngx_md5_update(&md5, fields->nonce.data, fields->nonce.len-1);
+    ngx_md5_update(&md5, ":", 1);
+    ngx_md5_update(&md5, fields->nc.data, fields->nc.len-1);
+    ngx_md5_update(&md5, ":", 1);
+    ngx_md5_update(&md5, fields->cnonce.data, fields->cnonce.len-1);
+    ngx_md5_update(&md5, ":", 1);
+    ngx_md5_update(&md5, fields->qop.data, fields->qop.len-1);
+    ngx_md5_update(&md5, ":", 1);
+    ngx_md5_update(&md5, HA2.data, HA2.len-1);
+    ngx_md5_final(hash, &md5);
     ngx_hex_dump(digest.data, hash, 16);
     
     ngx_str_set(&hkey, "Authentication-Info");
