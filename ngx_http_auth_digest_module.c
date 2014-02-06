@@ -296,6 +296,8 @@ ngx_http_auth_digest_decode_auth(ngx_http_request_t *r, ngx_str_t *auth_str, cha
   ngx_str_t key;
   u_char *start, *last, *p;
 
+  (void)p;
+
   key.len = ngx_strlen(field_name) + 2;
   key.data = ngx_pcalloc(r->pool, key.len);
   p = ngx_sprintf(key.data,"%s=", field_name);
